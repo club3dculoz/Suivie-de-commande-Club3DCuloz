@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Club 3D</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><div class="wrap"><h1>Club 3D</h1><p>Gestion simple du stock et des commandes</p></div></header>
+<nav><div class="wrap nav"><button class="tab active" data-page="stock">Stock</button><button class="tab" data-page="commandes">Commandes</button><button class="tab" data-page="planning">Planning</button></div></nav>
+<main class="wrap">
+<section id="stock" class="page active">
+ <div class="title-row"><h2>Stock</h2><button id="addBtn">+ Ajouter</button></div>
+ <div class="stock-table-wrap"><table class="stock-table"><thead><tr><th>Type</th><th>Caractéristique</th><th>Couleur</th><th>Stock restant</th><th>Prix / bobine</th><th>Actions</th></tr></thead><tbody id="stock-list"><tr><td colspan="6" class="empty-cell">Chargement du stock...</td></tr></tbody></table></div>
+</section>
+<section id="commandes" class="page"><div class="title-row"><h2>Commandes</h2><button id="addOrderBtn">+ Nouvelle commande</button></div>
+<div class="order-summary">
+  <button class="summary-card summary-filter active" data-filter="Toutes"><span id="countAll">0</span><small>Toutes</small></button>
+  <button class="summary-card summary-filter" data-filter="À faire"><span id="countTodo">0</span><small>À faire</small></button>
+  <button class="summary-card summary-filter" data-filter="Imprimé"><span id="countPrinted">0</span><small>Imprimées</small></button>
+  <button class="summary-card summary-filter" data-filter="Livré"><span id="countDelivered">0</span><small>Livrées</small></button>
+  <button class="summary-card summary-filter" data-filter="Non payé"><span id="countUnpaid">0</span><small>Non payées</small></button>
+</div>
+<div class="order-tools"><input id="orderSearch" type="search" placeholder="Rechercher une commande, un client, un filament..."></div><div class="orders-table-wrap"><table class="orders-table"><thead><tr><th>Commande</th><th>Client</th><th>Date</th><th>Taille</th><th>Temps</th><th>Qté</th><th>Couleurs / filaments</th><th>Prix</th><th>Statut</th><th>Payé</th><th>Actions</th></tr></thead><tbody id="order-list"><tr><td colspan="11" class="empty-cell">Chargement des commandes...</td></tr></tbody></table></div></section>
+<section id="planning" class="page">
+  <div class="planning-header"><div><h2>Planning</h2><p>Planification hebdomadaire des impressions</p></div><div class="week-nav"><button id="prevWeek" class="secondary">‹</button><button id="todayWeek" class="secondary">Cette semaine</button><button id="nextWeek" class="secondary">›</button></div></div>
+  <div id="weekTitle" class="week-title"></div>
+  <div class="planning-legend"><span><i class="dot p2s"></i>P2S</span><span><i class="dot h2c"></i>H2C</span><span class="planning-help">Clique sur un créneau vide pour planifier une commande.</span></div>
+  <div id="planningGrid" class="planning-grid"></div>
+</section></main>
+<div id="modal" class="modal hidden"><div class="dialog"><div class="dialog-head"><h3 id="modalTitle">Ajouter un filament</h3><button id="closeBtn" class="icon">x</button></div>
+<form id="stockForm"><input id="editId" type="hidden">
+<label>Type<input id="type" required placeholder="PLA, PETG..."></label>
+<label>Caracteristique<input id="caracteristique" required placeholder="Basic, Matte..."></label>
+<label>Couleur<input id="couleur" required placeholder="Noir, Rouge..."></label>
+<label>Grammes restant<input id="grammes" required type="number" step="1"></label>
+<label>Prix par bobine<input id="prix" type="number" min="0" step="0.01" placeholder="12.00"></label>
+<div class="actions"><button type="button" id="cancelBtn" class="secondary">Annuler</button><button type="submit">Enregistrer</button></div>
+</form></div></div>
+<div id="orderModal" class="modal hidden"><div class="dialog"><div class="dialog-head"><h3 id="orderModalTitle">Nouvelle commande</h3><button id="orderCloseBtn" class="icon">x</button></div><form id="orderForm"><input id="orderEditId" type="hidden"><label>Commande<input id="commande" required></label><label>Pour qui<input id="pourQui" required></label><label>Date<input id="dateCommande" type="date" required></label><label>Lien fichier 3D<input id="lienFichier" type="text"></label><label>Taille<input id="taille"></label><label>Temps d'impression<div class="time-inputs"><div><input id="tempsHeures" type="number" min="0" step="1" value="0"><span>h</span></div><div><input id="tempsMinutes" type="number" min="0" max="59" step="1" value="0"><span>min</span></div></div></label><label>Quantite<input id="quantite" type="number" min="1" value="1" required></label><div class="materials-box"><div class="materials-head"><strong>Couleurs / filaments</strong><div><button type="button" id="addStockMaterialBtn" class="secondary small">+ Depuis le stock</button><button type="button" id="addTextMaterialBtn" class="secondary small">+ Texte libre</button></div></div><div id="materials-list" class="materials-list"><div class="material-empty">Aucune couleur ajoutee.</div></div></div><label>Prix calcule<input id="calculatedPrice" type="text" readonly value="0.00 EUR"></label><label>Prix final<input id="orderPrix" type="number" min="0" step="0.01"></label><label>Statut<select id="statut"><option>À faire</option><option>Imprimé</option><option>Livré</option></select></label><label class="check"><input id="paye" type="checkbox"> Paye</label><div class="actions"><button type="button" id="orderCancelBtn" class="secondary">Annuler</button><button type="submit">Enregistrer</button></div></form></div></div><div id="planningModal" class="modal hidden"><div class="dialog planning-dialog"><div class="dialog-head"><h3 id="planningModalTitle">Planifier une impression</h3><button id="planningCloseBtn" class="icon">x</button></div><form id="planningForm"><input id="planningOrderId" type="hidden"><label>Commande<select id="planningCommande" required></select></label><label>Imprimante<select id="planningPrinter"><option value="P2S">P2S</option><option value="H2C">H2C</option></select></label><label>Date<input id="planningDate" type="date" required></label><label>Heure de début<input id="planningTime" type="time" step="900" required></label><div id="planningDuration" class="planning-duration"></div><div id="planningConflict" class="planning-conflict hidden"></div><div class="actions planning-actions"><button type="button" id="planningDeleteBtn" class="danger hidden">Retirer du planning</button><span class="spacer"></span><button type="button" id="planningCancelBtn" class="secondary">Annuler</button><button type="submit">Planifier</button></div></form></div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+</body></html>
