@@ -276,147 +276,32 @@ chargerCommandes = async function() {
 chargerCommandes();
 
 // ==================================================
-// V11 - PLANNING HEBDOMADAIRE P2S / H2C
-// ==================================================
-const planningGrid=$('planningGrid'), planningModal=$('planningModal'), planningForm=$('planningForm');
-let planningWeekStart=startOfWeek(new Date());
-let planningOrders=[];
-const DAY_START=7, DAY_END=22, DAY_MINUTES=(DAY_END-DAY_START)*60;
-
-function startOfWeek(d){const x=new Date(d);x.setHours(0,0,0,0);const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return x;}
-function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
-function isoDateLocal(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
-function formatDay(d){return d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});}
-function formatWeek(a){const b=addDays(a,6);return `Semaine du ${a.toLocaleDateString('fr-FR',{day:'numeric',month:'long'})} au ${b.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}`;}
-function minutesToLabel(m){return afficherTemps(m);}
-function dateTimeLocal(date,time){return new Date(`${date}T${time}:00`);}
-function eventTop(d){return (((d.getHours()*60+d.getMinutes())-DAY_START*60)/DAY_MINUTES)*100;}
-function eventHeight(mins){return Math.max(12,(Number(mins||30)/DAY_MINUTES)*100);}
-function overlaps(startA,durA,startB,durB){return startA < new Date(startB.getTime()+durB*60000) && startB < new Date(startA.getTime()+durA*60000);}
-
-async function chargerPlanning(){
-  const end=addDays(planningWeekStart,7);
-  const {data,error}=await db.from('Commande').select('*').gte('DateImpression',planningWeekStart.toISOString()).lt('DateImpression',end.toISOString()).order('DateImpression');
-  if(error){planningGrid.innerHTML=`<div class="empty">Erreur planning : ${esc(error.message)}</div>`;return;}
-  planningOrders=data||[];
-  renderPlanning();
-}
-
-function renderPlanning(){
-  $('weekTitle').textContent=formatWeek(planningWeekStart);
-  const today=isoDateLocal(new Date());
-  let html='<div class="planning-corner"></div>';
-  for(let i=0;i<7;i++){const d=addDays(planningWeekStart,i);html+=`<div class="planning-day ${isoDateLocal(d)===today?'today':''}"><strong>${esc(formatDay(d))}</strong><small>${isoDateLocal(d)}</small></div>`;}
-  for(const printer of ['P2S','H2C']){
-    html+=`<div class="printer-label ${printer.toLowerCase()}">${printer}</div>`;
-    for(let i=0;i<7;i++){
-      const d=addDays(planningWeekStart,i), dateStr=isoDateLocal(d);
-      html+=`<div class="planning-cell" data-printer="${printer}" data-date="${dateStr}">`;
-      for(let h=DAY_START;h<=DAY_END;h+=2){const top=((h-DAY_START)/(DAY_END-DAY_START))*100;html+=`<span class="planning-hour" style="top:${top}%">${String(h).padStart(2,'0')}:00</span>`;}
-      const dayEvents=planningOrders.filter(c=>c.Imprimante===printer && isoDateLocal(new Date(c.DateImpression))===dateStr);
-      for(const c of dayEvents){const start=new Date(c.DateImpression),duration=Number(c.TempsImpression)||30;const conflict=dayEvents.some(o=>o.id!==c.id&&overlaps(start,duration,new Date(o.DateImpression),Number(o.TempsImpression)||30));html+=`<div class="planning-event ${printer.toLowerCase()} ${conflict?'conflict':''}" data-order-id="${c.id}" style="top:${Math.max(0,eventTop(start))}%;height:${Math.min(100-Math.max(0,eventTop(start)),eventHeight(duration))}%"><strong>${esc(c.Commande)}</strong><span>${String(start.getHours()).padStart(2,'0')}:${String(start.getMinutes()).padStart(2,'0')} · ${esc(c.Client||'')} · ${esc(minutesToLabel(duration))}</span></div>`;}
-      html+='</div>';
-    }
-  }
-  planningGrid.innerHTML=html;
-  planningGrid.querySelectorAll('.planning-cell').forEach(cell=>cell.addEventListener('click',e=>{if(e.target.closest('.planning-event'))return;const rect=cell.getBoundingClientRect();const ratio=Math.max(0,Math.min(1,(e.clientY-rect.top)/rect.height));let minutes=Math.round((DAY_START*60+ratio*DAY_MINUTES)/15)*15;const hh=String(Math.floor(minutes/60)).padStart(2,'0'),mm=String(minutes%60).padStart(2,'0');ouvrirPlanification(null,cell.dataset.printer,cell.dataset.date,`${hh}:${mm}`);}));
-  planningGrid.querySelectorAll('.planning-event').forEach(ev=>ev.addEventListener('click',e=>{e.stopPropagation();const c=planningOrders.find(x=>Number(x.id)===Number(ev.dataset.orderId));if(c)ouvrirPlanification(c);}));
-}
-
-async function remplirCommandesPlanning(selectedId=null){
-  const {data,error}=await db.from('Commande').select('*').order('DateCommande',{ascending:true});if(error)throw error;
-  const eligible=(data||[]).filter(c=>statutNormalise(c.Statut)==='À faire'||Number(c.id)===Number(selectedId));
-  $('planningCommande').innerHTML=eligible.length?eligible.map(c=>`<option value="${c.id}" ${Number(c.id)===Number(selectedId)?'selected':''}>${esc(c.Commande)} · ${esc(c.Client||'')} · ${esc(afficherTemps(c.TempsImpression))}</option>`).join(''):'<option value="">Aucune commande à faire</option>';
-  updatePlanningDuration();
-}
-async function updatePlanningDuration(){const id=Number($('planningCommande').value);if(!id){$('planningDuration').textContent='Aucune commande sélectionnée.';return;}const {data}=await db.from('Commande').select('TempsImpression').eq('id',id).single();$('planningDuration').textContent=`Durée prévue : ${afficherTemps(data?.TempsImpression)}`;checkPlanningConflict();}
-async function checkPlanningConflict(){
-  const id=Number($('planningCommande').value), printer=$('planningPrinter').value,date=$('planningDate').value,time=$('planningTime').value;if(!id||!date||!time)return;
-  const {data:c}=await db.from('Commande').select('TempsImpression').eq('id',id).single();const dur=Number(c?.TempsImpression)||30,start=dateTimeLocal(date,time);
-  const conflict=planningOrders.find(o=>Number(o.id)!==id&&o.Imprimante===printer&&overlaps(start,dur,new Date(o.DateImpression),Number(o.TempsImpression)||30));
-  const box=$('planningConflict');if(conflict){box.textContent=`⚠ Conflit avec ${conflict.Commande} (${conflict.Client||''}). La planification reste autorisée.`;box.classList.remove('hidden');}else box.classList.add('hidden');
-}
-async function ouvrirPlanification(order=null,printer='P2S',date=isoDateLocal(new Date()),time='09:00'){
-  $('planningOrderId').value=order?.id||'';await remplirCommandesPlanning(order?.id||null);$('planningPrinter').value=order?.Imprimante||printer;
-  if(order?.DateImpression){const d=new Date(order.DateImpression);$('planningDate').value=isoDateLocal(d);$('planningTime').value=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}else{$('planningDate').value=date;$('planningTime').value=time;}
-  $('planningDeleteBtn').classList.toggle('hidden',!order);$('planningModalTitle').textContent=order?'Modifier la planification':'Planifier une impression';await updatePlanningDuration();planningModal.classList.remove('hidden');
-}
-$('planningCommande').onchange=updatePlanningDuration;$('planningPrinter').onchange=checkPlanningConflict;$('planningDate').onchange=checkPlanningConflict;$('planningTime').onchange=checkPlanningConflict;
-$('planningCloseBtn').onclick=$('planningCancelBtn').onclick=()=>planningModal.classList.add('hidden');
-planningForm.onsubmit=async e=>{e.preventDefault();const id=Number($('planningCommande').value);if(!id)return alert('Choisis une commande.');const local=dateTimeLocal($('planningDate').value,$('planningTime').value);const {error}=await db.from('Commande').update({DateImpression:local.toISOString(),Imprimante:$('planningPrinter').value}).eq('id',id);if(error)return alert(error.message);planningModal.classList.add('hidden');await chargerPlanning();};
-$('planningDeleteBtn').onclick=async()=>{const id=Number($('planningOrderId').value||$('planningCommande').value);if(!id)return;const {error}=await db.from('Commande').update({DateImpression:null,Imprimante:null}).eq('id',id);if(error)return alert(error.message);planningModal.classList.add('hidden');await chargerPlanning();};
-$('prevWeek').onclick=()=>{planningWeekStart=addDays(planningWeekStart,-7);chargerPlanning();};$('nextWeek').onclick=()=>{planningWeekStart=addDays(planningWeekStart,7);chargerPlanning();};$('todayWeek').onclick=()=>{planningWeekStart=startOfWeek(new Date());chargerPlanning();};
-document.querySelector('[data-page="planning"]').addEventListener('click',chargerPlanning);
-chargerPlanning();
 
 // ==================================================
-// V12 - PLANNING UNIQUE + IMPRESSIONS MULTI-JOURS
+// V14 - PLANNING IMPRESSION + COULEURS (moteur unique)
 // ==================================================
-function v12DayStart(d){const x=new Date(d);x.setHours(0,0,0,0);return x;}
-function v12NextDay(d){return addDays(v12DayStart(d),1);}
-function v12Segments(order){
-  const start=new Date(order.DateImpression);
-  const end=new Date(start.getTime()+(Number(order.TempsImpression)||30)*60000);
-  const weekEnd=addDays(planningWeekStart,7);
-  let cursor=start<planningWeekStart?new Date(planningWeekStart):new Date(start);
-  const visibleEnd=end>weekEnd?weekEnd:end;
-  const out=[];
-  while(cursor<visibleEnd){
-    const boundary=v12NextDay(cursor);
-    const segEnd=boundary<visibleEnd?boundary:visibleEnd;
-    const idx=Math.round((v12DayStart(cursor)-planningWeekStart)/86400000);
-    if(idx>=0&&idx<7)out.push({idx,start:new Date(cursor),end:new Date(segEnd),first:cursor.getTime()===start.getTime(),last:segEnd.getTime()===end.getTime()});
-    cursor=new Date(segEnd);
-  }
-  return out;
-}
-async function chargerPlanningV12(){
-  const weekEnd=addDays(planningWeekStart,7);
-  const lookback=new Date(planningWeekStart.getTime()-14*86400000);
-  const {data,error}=await db.from('Commande').select('*').not('DateImpression','is',null).gte('DateImpression',lookback.toISOString()).lt('DateImpression',weekEnd.toISOString()).order('DateImpression');
-  if(error){planningGrid.innerHTML=`<div class="empty">Erreur planning : ${esc(error.message)}</div>`;return;}
-  planningOrders=(data||[]).filter(c=>new Date(new Date(c.DateImpression).getTime()+(Number(c.TempsImpression)||30)*60000)>planningWeekStart);
-  renderPlanningV12();
-}
-function renderPlanningV12(){
-  $('weekTitle').textContent=formatWeek(planningWeekStart);
-  planningGrid.className='planning-grid v12';
-  const today=isoDateLocal(new Date());
-  let html='<div class="planning-corner"></div>';
-  for(let i=0;i<7;i++){const d=addDays(planningWeekStart,i);html+=`<div class="planning-day ${isoDateLocal(d)===today?'today':''}"><strong>${esc(formatDay(d))}</strong><small>${isoDateLocal(d)}</small></div>`;}
-  html+='<div class="planning-time-axis">';
-  for(let h=0;h<24;h+=2)html+=`<span class="planning-time-label" style="top:${h/24*100}%">${String(h).padStart(2,'0')}:00</span>`;
-  html+='</div>';
-  for(let i=0;i<7;i++){
-    const d=addDays(planningWeekStart,i);
-    html+=`<div class="planning-day-column ${isoDateLocal(d)===today?'today-column':''}" data-date="${isoDateLocal(d)}">`;
-    for(const c of planningOrders){
-      for(const seg of v12Segments(c)){
-        if(seg.idx!==i)continue;
-        const sm=seg.start.getHours()*60+seg.start.getMinutes();
-        const midnight=seg.end.getHours()===0&&seg.end.getMinutes()===0&&seg.end>seg.start;
-        const em=midnight?1440:seg.end.getHours()*60+seg.end.getMinutes();
-        const top=sm/1440*100;
-        const height=Math.max(1.7,(em-sm)/1440*100);
-        const cls=`${seg.first?'segment-start':''} ${seg.last?'segment-end':''} ${!seg.first&&!seg.last?'segment-middle':''}`;
-        html+=`<div class="planning-event ${String(c.Imprimante||'P2S').toLowerCase()} ${cls}" data-order-id="${c.id}" style="top:${top}%;height:${height}%"><span class="printer-tag">${esc(c.Imprimante||'?')}</span><strong>${esc(c.Commande)}</strong>${height>5?`<span>${esc(c.Client||'')} · ${esc(afficherTemps(c.TempsImpression))}</span>`:''}</div>`;
-      }
-    }
-    html+='</div>';
-  }
-  planningGrid.innerHTML=html;
-  planningGrid.querySelectorAll('.planning-day-column').forEach(cell=>cell.onclick=e=>{
-    if(e.target.closest('.planning-event'))return;
-    const r=cell.getBoundingClientRect();
-    const ratio=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));
-    let mins=Math.min(1425,Math.round(ratio*1440/15)*15);
-    ouvrirPlanification(null,'P2S',cell.dataset.date,`${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`);
-  });
-  planningGrid.querySelectorAll('.planning-event').forEach(ev=>ev.onclick=e=>{e.stopPropagation();const c=planningOrders.find(x=>Number(x.id)===Number(ev.dataset.orderId));if(c)ouvrirPlanification(c);});
-}
-chargerPlanning=chargerPlanningV12;
-$('prevWeek').onclick=()=>{planningWeekStart=addDays(planningWeekStart,-7);chargerPlanningV12();};
-$('nextWeek').onclick=()=>{planningWeekStart=addDays(planningWeekStart,7);chargerPlanningV12();};
-$('todayWeek').onclick=()=>{planningWeekStart=startOfWeek(new Date());chargerPlanningV12();};
-document.querySelector('[data-page="planning"]').onclick=chargerPlanningV12;
-chargerPlanningV12();
+const planningGrid=$('planningGrid'),planningModal=$('planningModal'),planningForm=$('planningForm');
+let planningWeekStart=v14StartWeek(new Date()),planningSlots=[],planningCommands=[],planningLinks=[],planningColors=[];
+function v14StartWeek(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
+function v14AddDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
+function v14DayStart(d){const x=new Date(d);x.setHours(0,0,0,0);return x;}
+function v14IsoDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function v14Local(date,time){return new Date(`${date}T${time}:00`);}
+function v14Duration(a,b){return Math.max(0,Math.round((b-a)/60000));}
+function v14FmtDuration(m){const h=Math.floor(m/60),r=m%60;return h?(r?`${h} h ${String(r).padStart(2,'0')}`:`${h} h`):`${r} min`;}
+function v14WeekTitle(a){const b=v14AddDays(a,6);return `Semaine du ${a.toLocaleDateString('fr-FR',{day:'numeric',month:'long'})} au ${b.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}`;}
+function v14Overlap(a1,a2,b1,b2){return a1<b2&&b1<a2;}
+function v14ColorLabel(id){const row=planningColors.find(x=>Number(x.id)===Number(id));if(!row)return `Couleur #${id}`;if(row.StockID!=null){const st=stockCache.find(x=>Number(x.id)===Number(row.StockID));return `${st?stockLabel(st):'Stock #'+row.StockID}${row.Grammes!=null?' · '+row.Grammes+' g':''}`;}return row.TexteLibre||'Texte libre';}
+function v14Segments(slot){const start=new Date(slot.DateDebut),end=new Date(slot.DateFin),weekEnd=v14AddDays(planningWeekStart,7);let cur=start<planningWeekStart?new Date(planningWeekStart):new Date(start),visEnd=end>weekEnd?weekEnd:end,out=[];while(cur<visEnd){const boundary=v14AddDays(v14DayStart(cur),1),segEnd=boundary<visEnd?boundary:visEnd,idx=Math.round((v14DayStart(cur)-planningWeekStart)/86400000);if(idx>=0&&idx<7)out.push({idx,start:new Date(cur),end:new Date(segEnd),first:cur.getTime()===start.getTime(),last:segEnd.getTime()===end.getTime()});cur=new Date(segEnd);}return out;}
+async function chargerPlanning(){const end=v14AddDays(planningWeekStart,7);const results=await Promise.all([db.from('PlanningImpression').select('*').lt('DateDebut',end.toISOString()).gt('DateFin',planningWeekStart.toISOString()).order('DateDebut'),db.from('Commande').select('id,Commande,Client,Statut,TempsImpression').order('DateCommande'),db.from('PlanningCouleur').select('*'),db.from('CouleurCommande').select('*')]);const err=results.find(x=>x.error)?.error;if(err){planningGrid.innerHTML=`<div class="empty">Erreur planning : ${esc(err.message)}</div>`;return;}planningSlots=results[0].data||[];planningCommands=results[1].data||[];planningLinks=results[2].data||[];planningColors=results[3].data||[];renderPlanning();}
+function renderPlanning(){$('weekTitle').textContent=v14WeekTitle(planningWeekStart);planningGrid.className='planning-grid v14';const today=v14IsoDate(new Date());let html='<div class="planning-corner"></div>';for(let i=0;i<7;i++){const d=v14AddDays(planningWeekStart,i);html+=`<div class="planning-day ${v14IsoDate(d)===today?'today':''}"><strong>${esc(d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'}))}</strong><small>${v14IsoDate(d)}</small></div>`;}html+='<div class="planning-time-axis">';for(let h=0;h<24;h+=2)html+=`<span class="planning-time-label" style="top:${h/24*100}%">${String(h).padStart(2,'0')}:00</span>`;html+='</div>';for(let i=0;i<7;i++){const d=v14AddDays(planningWeekStart,i);html+=`<div class="planning-day-column ${v14IsoDate(d)===today?'today-column':''}" data-date="${v14IsoDate(d)}">`;for(const slot of planningSlots)for(const seg of v14Segments(slot)){if(seg.idx!==i)continue;const cmd=planningCommands.find(c=>Number(c.id)===Number(slot.CommandeID)),sm=seg.start.getHours()*60+seg.start.getMinutes(),mid=seg.end.getHours()===0&&seg.end.getMinutes()===0&&seg.end>seg.start,em=mid?1440:seg.end.getHours()*60+seg.end.getMinutes(),top=sm/1440*100,height=Math.max(1.7,(em-sm)/1440*100),conflict=planningSlots.some(o=>o.id!==slot.id&&o.Imprimante===slot.Imprimante&&v14Overlap(new Date(slot.DateDebut),new Date(slot.DateFin),new Date(o.DateDebut),new Date(o.DateFin))),cls=`${seg.first?'segment-start':''} ${seg.last?'segment-end':''} ${!seg.first&&!seg.last?'segment-middle':''}`,colors=planningLinks.filter(x=>Number(x.PlanningID)===Number(slot.id)).map(x=>v14ColorLabel(x.CouleurCommandeID));html+=`<div class="planning-event ${slot.Imprimante.toLowerCase()} ${cls} ${conflict?'conflict':''}" data-slot-id="${slot.id}" style="top:${top}%;height:${height}%"><span class="printer-tag">${esc(slot.Imprimante)}</span><strong>${esc(cmd?.Commande||'Commande')}</strong>${slot.Commentaire?`<span>${esc(slot.Commentaire)}</span>`:''}${colors.length?`<span class="event-colors">${esc(colors.join(' · '))}</span>`:''}${height>6?`<span>${esc(cmd?.Client||'')} · ${v14FmtDuration(v14Duration(new Date(slot.DateDebut),new Date(slot.DateFin)))}</span>`:''}</div>`;}html+='</div>';}planningGrid.innerHTML=html;planningGrid.querySelectorAll('.planning-day-column').forEach(cell=>cell.onclick=e=>{if(e.target.closest('.planning-event'))return;const r=cell.getBoundingClientRect(),ratio=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height)),mins=Math.min(1425,Math.round(ratio*1440/15)*15);ouvrirPlanning(null,'P2S',cell.dataset.date,`${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`);});planningGrid.querySelectorAll('.planning-event').forEach(el=>el.onclick=e=>{e.stopPropagation();ouvrirPlanning(planningSlots.find(x=>Number(x.id)===Number(el.dataset.slotId)));});}
+function remplirCommandes(selected){const allowed=planningCommands.filter(c=>statutNormalise(c.Statut)==='À faire'||Number(c.id)===Number(selected));$('planningCommande').innerHTML=allowed.map(c=>`<option value="${c.id}" ${Number(c.id)===Number(selected)?'selected':''}>${esc(c.Commande)} · ${esc(c.Client||'')}</option>`).join('');}
+function renderPlanningColors(commandId,slotId=null){const rows=planningColors.filter(x=>Number(x.CommandeID)===Number(commandId)),selected=new Set(planningLinks.filter(x=>Number(x.PlanningID)===Number(slotId)).map(x=>Number(x.CouleurCommandeID)));$('planningColors').innerHTML=rows.length?rows.map(row=>`<label class="planning-color-option"><input type="checkbox" value="${row.id}" ${selected.has(Number(row.id))?'checked':''}><span>${esc(v14ColorLabel(row.id))}</span></label>`).join(''):'<span class="muted">Cette commande n’a aucune couleur renseignée.</span>';}
+function selectedPlanningColors(){return Array.from(document.querySelectorAll('#planningColors input:checked')).map(x=>Number(x.value));}
+async function savePlanningColors(id){const {error:de}=await db.from('PlanningCouleur').delete().eq('PlanningID',id);if(de)throw de;const ids=selectedPlanningColors();if(ids.length){const {error}=await db.from('PlanningCouleur').insert(ids.map(color=>({PlanningID:Number(id),CouleurCommandeID:color})));if(error)throw error;}}
+function majDureeEtConflit(){const a=v14Local($('planningStartDate').value,$('planningStartTime').value),b=v14Local($('planningEndDate').value,$('planningEndTime').value),ok=b>a;$('planningDuration').textContent=ok?`Durée du créneau : ${v14FmtDuration(v14Duration(a,b))}`:'La fin doit être après le début.';const id=Number($('planningSlotId').value),conf=ok&&planningSlots.find(x=>Number(x.id)!==id&&x.Imprimante===$('planningPrinter').value&&v14Overlap(a,b,new Date(x.DateDebut),new Date(x.DateFin)));$('planningConflict').classList.toggle('hidden',!conf);$('planningConflict').textContent=conf?'⚠ Ce créneau chevauche une autre impression sur cette imprimante. La sauvegarde reste autorisée.':'';}
+function ouvrirPlanning(slot=null,printer='P2S',date=v14IsoDate(new Date()),time='09:00'){$('planningSlotId').value=slot?.id||'';remplirCommandes(slot?.CommandeID);$('planningCommande').value=slot?.CommandeID||$('planningCommande').value;$('planningCommentaire').value=slot?.Commentaire||'';$('planningPrinter').value=slot?.Imprimante||printer;const start=slot?new Date(slot.DateDebut):v14Local(date,time),cmd=planningCommands.find(c=>Number(c.id)===Number($('planningCommande').value)),end=slot?new Date(slot.DateFin):new Date(start.getTime()+(Number(cmd?.TempsImpression)||60)*60000);$('planningStartDate').value=v14IsoDate(start);$('planningStartTime').value=`${String(start.getHours()).padStart(2,'0')}:${String(start.getMinutes()).padStart(2,'0')}`;$('planningEndDate').value=v14IsoDate(end);$('planningEndTime').value=`${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`;renderPlanningColors(Number($('planningCommande').value),slot?.id||null);$('planningDeleteBtn').classList.toggle('hidden',!slot);$('planningModalTitle').textContent=slot?'Modifier le créneau':'Planifier une impression';majDureeEtConflit();planningModal.classList.remove('hidden');}
+$('planningCommande').onchange=()=>{renderPlanningColors(Number($('planningCommande').value),null);const cmd=planningCommands.find(c=>Number(c.id)===Number($('planningCommande').value)),a=v14Local($('planningStartDate').value,$('planningStartTime').value),b=new Date(a.getTime()+(Number(cmd?.TempsImpression)||60)*60000);$('planningEndDate').value=v14IsoDate(b);$('planningEndTime').value=`${String(b.getHours()).padStart(2,'0')}:${String(b.getMinutes()).padStart(2,'0')}`;majDureeEtConflit();};
+['planningPrinter','planningStartDate','planningStartTime','planningEndDate','planningEndTime'].forEach(id=>$(id).onchange=majDureeEtConflit);$('planningCloseBtn').onclick=$('planningCancelBtn').onclick=()=>planningModal.classList.add('hidden');
+planningForm.onsubmit=async e=>{e.preventDefault();const a=v14Local($('planningStartDate').value,$('planningStartTime').value),b=v14Local($('planningEndDate').value,$('planningEndTime').value);if(b<=a)return alert('La fin doit être après le début.');const payload={CommandeID:Number($('planningCommande').value),Imprimante:$('planningPrinter').value,DateDebut:a.toISOString(),DateFin:b.toISOString(),Commentaire:$('planningCommentaire').value.trim()||null};let id=$('planningSlotId').value;if(id){const {error}=await db.from('PlanningImpression').update(payload).eq('id',id);if(error)return alert(error.message);}else{const {data,error}=await db.from('PlanningImpression').insert(payload).select('id').single();if(error)return alert(error.message);id=data.id;}try{await savePlanningColors(id);}catch(error){return alert('Créneau enregistré, mais erreur couleurs : '+error.message);}planningModal.classList.add('hidden');chargerPlanning();};
+$('planningDeleteBtn').onclick=async()=>{const id=$('planningSlotId').value;if(!id)return;const {error}=await db.from('PlanningImpression').delete().eq('id',id);if(error)return alert(error.message);planningModal.classList.add('hidden');chargerPlanning();};$('prevWeek').onclick=()=>{planningWeekStart=v14AddDays(planningWeekStart,-7);chargerPlanning();};$('nextWeek').onclick=()=>{planningWeekStart=v14AddDays(planningWeekStart,7);chargerPlanning();};$('todayWeek').onclick=()=>{planningWeekStart=v14StartWeek(new Date());chargerPlanning();};document.querySelector('[data-page="planning"]').onclick=chargerPlanning;
