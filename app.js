@@ -19,33 +19,34 @@ document.querySelectorAll('.tab').forEach(button => {
 const stockList = $('stock-list');
 const stockModal = $('modal');
 const stockForm = $('stockForm');
-const sf = {id:$('editId'),type:$('type'),carac:$('caracteristique'),couleur:$('couleur'),grammes:$('grammes'),prix:$('prix')};
+const sf = {id:$('editId'),type:$('type'),carac:$('caracteristique'),couleur:$('couleur'),grammes:$('grammes'),prix:$('prix'),couleurHex:$('couleurHex'),couleurHexText:$('couleurHexText')};
 let stockCache = [];
 
-async function chargerStock() {
-  const {data,error} = await db.from('Stock').select('*').order('id');
-  if (error) { stockList.innerHTML = `<tr><td colspan="6" class="empty-cell">Erreur : ${esc(error.message)}</td></tr>`; return; }
-  stockCache = data || [];
-  stockList.innerHTML = stockCache.length ? stockCache.map(f => `
+function normaliserHex(value){const v=String(value||'').trim();return /^#[0-9a-f]{6}$/i.test(v)?v.toUpperCase():'#808080';}
+function stockSwatch(item,classe=''){return `<span class="color-swatch ${classe}" style="background:${esc(normaliserHex(item?.CouleurHex))}" title="${esc(item?.Couleur||'Couleur')}"></span>`;}
+function stockHaystack(item){return `${item.Type||''} ${item.Caracteristique||''} ${item.Couleur||''}`.toLocaleLowerCase('fr');}
+function stockTrie(items){const mode=$('stockSort')?.value||'type-asc';return [...items].sort((a,b)=>{switch(mode){case'type-desc':return String(b.Type||'').localeCompare(String(a.Type||''),'fr');case'carac-asc':return String(a.Caracteristique||'').localeCompare(String(b.Caracteristique||''),'fr');case'couleur-asc':return String(a.Couleur||'').localeCompare(String(b.Couleur||''),'fr');case'grammes-desc':return Number(b.Grammes||0)-Number(a.Grammes||0);case'grammes-asc':return Number(a.Grammes||0)-Number(b.Grammes||0);case'prix-desc':return Number(b.PrixParBobine||0)-Number(a.PrixParBobine||0);case'prix-asc':return Number(a.PrixParBobine||0)-Number(b.PrixParBobine||0);default:return String(a.Type||'').localeCompare(String(b.Type||''),'fr');}});}
+function afficherStock(){const q=($('stockSearch')?.value||'').trim().toLocaleLowerCase('fr'),words=q.split(/\s+/).filter(Boolean);const visible=stockTrie(stockCache.filter(item=>words.every(w=>stockHaystack(item).includes(w))));stockList.innerHTML=visible.length?visible.map(f=>`
     <tr>
       <td><strong>${esc(f.Type)}</strong></td>
       <td>${esc(f.Caracteristique)}</td>
-      <td><span class="color-name">${esc(f.Couleur)}</span></td>
+      <td><span class="color-cell">${stockSwatch(f)}<span class="color-name">${esc(f.Couleur)}</span></span></td>
       <td><span class="stock-grams ${Number(f.Grammes)<0?'negative-stock':''}">${esc(f.Grammes)} g</span></td>
-      <td>${f.PrixParBobine == null ? '<span class="muted">Non renseigné</span>' : `${esc(f.PrixParBobine)} €`}</td>
+      <td>${f.PrixParBobine==null?'<span class="muted">Non renseigné</span>':`${esc(f.PrixParBobine)} €`}</td>
       <td class="actions-cell"><button class="secondary" onclick="modifierStock(${f.id})">Modifier</button> <button class="danger" onclick="supprimerStock(${f.id})">Supprimer</button></td>
-    </tr>`).join('') : '<tr><td colspan="6" class="empty-cell">Aucun filament dans le stock.</td></tr>';
-}
-function fermerStock(){ stockModal.classList.add('hidden'); stockForm.reset(); sf.id.value=''; }
+    </tr>`).join(''):`<tr><td colspan="6" class="stock-no-result">${stockCache.length?'Aucun filament ne correspond à la recherche.':'Aucun filament dans le stock.'}</td></tr>`;}
+async function chargerStock(){const {data,error}=await db.from('Stock').select('*').order('id');if(error){stockList.innerHTML=`<tr><td colspan="6" class="empty-cell">Erreur : ${esc(error.message)}</td></tr>`;return;}stockCache=data||[];afficherStock();}
+function fermerStock(){stockModal.classList.add('hidden');stockForm.reset();sf.id.value='';sf.couleurHex.value='#808080';sf.couleurHexText.value='#808080';}
 $('addBtn').onclick = () => { fermerStock(); $('modalTitle').textContent='Ajouter un filament'; stockModal.classList.remove('hidden'); };
 $('closeBtn').onclick = $('cancelBtn').onclick = fermerStock;
+$('stockSearch').oninput=afficherStock;$('stockSort').onchange=afficherStock;sf.couleurHex.oninput=()=>sf.couleurHexText.value=sf.couleurHex.value.toUpperCase();sf.couleurHexText.oninput=()=>{if(/^#[0-9a-f]{6}$/i.test(sf.couleurHexText.value))sf.couleurHex.value=sf.couleurHexText.value;};
 stockForm.onsubmit = async e => {
   e.preventDefault();
-  const p={Type:sf.type.value.trim(),Caracteristique:sf.carac.value.trim(),Couleur:sf.couleur.value.trim(),Grammes:Number(sf.grammes.value),PrixParBobine:sf.prix.value===''?null:Number(sf.prix.value)};
+  const p={Type:sf.type.value.trim(),Caracteristique:sf.carac.value.trim(),Couleur:sf.couleur.value.trim(),Grammes:Number(sf.grammes.value),PrixParBobine:sf.prix.value===''?null:Number(sf.prix.value),CouleurHex:normaliserHex(sf.couleurHex.value)};
   const {error}=await(sf.id.value?db.from('Stock').update(p).eq('id',sf.id.value):db.from('Stock').insert(p));
   if(error)return alert('Erreur : '+error.message); fermerStock(); await chargerStock();
 };
-window.modifierStock=async id=>{const {data,error}=await db.from('Stock').select('*').eq('id',id).single();if(error)return alert(error.message);sf.id.value=data.id;sf.type.value=data.Type??'';sf.carac.value=data.Caracteristique??'';sf.couleur.value=data.Couleur??'';sf.grammes.value=data.Grammes??'';sf.prix.value=data.PrixParBobine??'';$('modalTitle').textContent='Modifier le filament';stockModal.classList.remove('hidden');};
+window.modifierStock=async id=>{const {data,error}=await db.from('Stock').select('*').eq('id',id).single();if(error)return alert(error.message);sf.id.value=data.id;sf.type.value=data.Type??'';sf.carac.value=data.Caracteristique??'';sf.couleur.value=data.Couleur??'';sf.grammes.value=data.Grammes??'';sf.prix.value=data.PrixParBobine??'';sf.couleurHex.value=normaliserHex(data.CouleurHex);sf.couleurHexText.value=normaliserHex(data.CouleurHex);$('modalTitle').textContent='Modifier le filament';stockModal.classList.remove('hidden');};
 window.supprimerStock=async id=>{if(!confirm('Supprimer ce filament du stock ?'))return;const {error}=await db.from('Stock').delete().eq('id',id);if(error)return alert(error.message);await chargerStock();};
 
 // COMMANDES
@@ -75,18 +76,23 @@ function coutMatiere(m){if(m.mode!=='stock')return 0;const s=stockCache.find(x=>
 function prixMatiere(){const brut=materials.reduce((a,m)=>a+coutMatiere(m),0);return brut>0?Math.max(0.50,brut):0;}
 function refreshPrix(updateFinal=true){const p=prixMatiere();$('calculatedPrice').value=`${p.toFixed(2)} EUR`;if(updateFinal)of.prix.value=p.toFixed(2);const target=materialsList.querySelector('.material-summary .material-line strong:last-child');if(target)target.textContent=`${p.toFixed(2)} EUR`;}
 
+function materialOptions(search='',selected=null){const words=String(search||'').trim().toLocaleLowerCase('fr').split(/\s+/).filter(Boolean);return stockCache.filter(s=>Number(s.id)===Number(selected)||words.every(w=>stockHaystack(s).includes(w)));}
 function renderMaterials(){
   if(!materials.length){materialsList.innerHTML='<div class="material-empty">Aucune couleur ajoutée.</div>';refreshPrix(false);return;}
   materialsList.innerHTML=materials.map((m,i)=>m.mode==='text'?`
-    <div class="material-row text-row"><input type="text" placeholder="Ex. détails en blanc" value="${esc(m.texte)}" oninput="updateMaterialText(${i},this.value)"><button type="button" class="material-remove" onclick="removeMaterial(${i})">Supprimer</button></div>`:`
-    <div class="material-row"><select onchange="updateMaterialStock(${i},this.value)"><option value="">Choisir dans le stock</option>${stockCache.map(s=>`<option value="${s.id}" ${Number(s.id)===Number(m.stockId)?'selected':''}>${esc(stockLabel(s))}</option>`).join('')}</select><input type="number" step="1" placeholder="Grammes" value="${esc(m.grammes)}" oninput="updateMaterialGrams(${i},this.value)"><button type="button" class="material-remove" onclick="removeMaterial(${i})">Supprimer</button></div>`).join('')+`<div class="material-summary"><div class="material-line"><strong>Prix matière estimé</strong><strong>${prixMatiere().toFixed(2)} EUR</strong></div><div class="readonly-note">Calcul : grammes / 1000 × prix de la bobine, minimum 0,50 €.</div></div>`;
+    <div class="material-row text-row"><input type="text" placeholder="Ex. détails en blanc" value="${esc(m.texte)}" oninput="updateMaterialText(${i},this.value)"><button type="button" class="material-remove" onclick="removeMaterial(${i})">Supprimer</button></div>`:(()=>{const found=materialOptions(m.search,m.stockId),selected=stockCache.find(s=>Number(s.id)===Number(m.stockId));return `<div class="material-stock-row">
+      <div class="material-stock-picker"><input type="search" placeholder="Rechercher couleur, type, caractéristique..." value="${esc(m.search||'')}" data-material-index="${i}" oninput="filterMaterialStock(${i},this.value)"><span class="stock-result-count">${found.length} filament(s)</span></div>
+      <div class="material-stock-picker"><select onchange="updateMaterialStock(${i},this.value)"><option value="">Choisir dans les résultats</option>${found.map(s=>`<option value="${s.id}" ${Number(s.id)===Number(m.stockId)?'selected':''}>${esc(stockLabel(s))} · ${esc(s.Grammes)} g</option>`).join('')}</select><span class="material-selected">${selected?stockSwatch(selected)+esc(stockLabel(selected)):'Aucun filament choisi'}</span></div>
+      <label class="material-grams-field"><span>Grammes utilisés</span><input type="number" step="1" placeholder="0" value="${esc(m.grammes)}" oninput="updateMaterialGrams(${i},this.value)"></label>
+      <button type="button" class="material-remove" onclick="removeMaterial(${i})">Supprimer</button></div>`;})()).join('')+`<div class="material-summary"><div class="material-line"><strong>Prix matière estimé</strong><strong>${prixMatiere().toFixed(2)} EUR</strong></div><div class="readonly-note">Calcul : grammes / 1000 × prix de la bobine, minimum 0,50 €.</div></div>`;
   refreshPrix(false);
 }
 window.updateMaterialText=(i,v)=>{materials[i].texte=v;};
-window.updateMaterialStock=(i,v)=>{materials[i].stockId=v===''?null:Number(v);refreshPrix(true);};
+window.filterMaterialStock=(i,v)=>{materials[i].search=v;renderMaterials();const input=materialsList.querySelector(`input[data-material-index="${i}"]`);if(input){input.focus();input.setSelectionRange(v.length,v.length);}};
+window.updateMaterialStock=(i,v)=>{materials[i].stockId=v===''?null:Number(v);renderMaterials();refreshPrix(true);};
 window.updateMaterialGrams=(i,v)=>{materials[i].grammes=v;refreshPrix(true);};
 window.removeMaterial=i=>{materials.splice(i,1);renderMaterials();refreshPrix(true);};
-$('addStockMaterialBtn').onclick=async()=>{await chargerStock();materials.push({mode:'stock',stockId:null,grammes:''});renderMaterials();};
+$('addStockMaterialBtn').onclick=async()=>{await chargerStock();materials.push({mode:'stock',stockId:null,grammes:'',search:''});renderMaterials();};
 $('addTextMaterialBtn').onclick=()=>{materials.push({mode:'text',texte:''});renderMaterials();};
 
 function reglerStatuts(){const opt=Array.from(of.statut.options).find(o=>o.value==='À faire');if(opt)opt.disabled=currentStockDeduit;}
@@ -110,7 +116,7 @@ async function chargerCommandes(){
     const lignes=(byOrder[c.id]||[]).map(l=>{
       if(l.StockID!=null){
         const st=stockCache.find(x=>Number(x.id)===Number(l.StockID));
-        return `<span class="filament-display">${st?esc(stockLabel(st)):'Stock #'+esc(l.StockID)}${l.Grammes!=null?' · '+esc(l.Grammes)+' g':''}</span>`;
+        return `<span class="filament-display">${st?stockSwatch(st):''}${st?esc(stockLabel(st)):'Stock #'+esc(l.StockID)}${l.Grammes!=null?' · '+esc(l.Grammes)+' g':''}</span>`;
       }
       return l.TexteLibre?`<span class="filament-display">${esc(l.TexteLibre)}</span>`:'';
     }).join('') || '<span class="filament-display">-</span>';
@@ -126,7 +132,7 @@ async function chargerCommandes(){
   }).join('');
 }
 
-async function loadMaterials(id){const {data,error}=await db.from('CouleurCommande').select('*').eq('CommandeID',id).order('id');if(error)throw error;materials=(data||[]).map(r=>r.StockID!=null?{mode:'stock',stockId:r.StockID,grammes:r.Grammes??''}:{mode:'text',texte:r.TexteLibre??''});renderMaterials();}
+async function loadMaterials(id){const {data,error}=await db.from('CouleurCommande').select('*').eq('CommandeID',id).order('id');if(error)throw error;materials=(data||[]).map(r=>r.StockID!=null?{mode:'stock',stockId:r.StockID,grammes:r.Grammes??'',search:''}:{mode:'text',texte:r.TexteLibre??''});renderMaterials();}
 async function saveMaterials(id){const {error:delErr}=await db.from('CouleurCommande').delete().eq('CommandeID',id);if(delErr)throw delErr;const rows=materials.filter(m=>m.mode==='text'?m.texte.trim():m.stockId!=null).map(m=>m.mode==='stock'?{CommandeID:id,StockID:m.stockId,TexteLibre:null,Grammes:m.grammes===''?null:Number(m.grammes)}:{CommandeID:id,StockID:null,TexteLibre:m.texte.trim(),Grammes:null});if(rows.length){const {error}=await db.from('CouleurCommande').insert(rows);if(error)throw error;}}
 
 window.modifierCommande=async id=>{await chargerStock();const {data,error}=await db.from('Commande').select('*').eq('id',id).single();if(error)return alert(error.message);of.id.value=data.id;of.commande.value=data.Commande??'';of.client.value=data.Client??'';of.date.value=data.DateCommande??'';of.lien.value=data.LienFichier??'';of.taille.value=data.Taille??'';const totalMinutes=Number(data.TempsImpression)||0;of.tempsHeures.value=Math.floor(totalMinutes/60);of.tempsMinutes.value=totalMinutes%60;of.quantite.value=data.Quantite??1;of.prix.value=data.Prix??'';of.statut.value=data.Statut==='À imprimer'?'Imprimé':data.Statut==='À livrer'?'Livré':(data.Statut||'À faire');of.paye.checked=!!data.Paye;currentStockDeduit=!!data.StockDeduit;reglerStatuts();try{await loadMaterials(id);}catch(e){return alert('Erreur couleurs : '+e.message);}$('orderModalTitle').textContent='Modifier la commande';orderModal.classList.remove('hidden');};
@@ -214,7 +220,7 @@ chargerCommandes = async function(){
   couleursCommandeCache=couleurs||[];
   orderList.innerHTML=commandesCache.map(c=>{
     const lignes=couleursCommandeCache.filter(l=>Number(l.CommandeID)===Number(c.id)).map(l=>{
-      if(l.StockID!=null){const st=stockCache.find(x=>Number(x.id)===Number(l.StockID));return `<span class="filament-display">${st?esc(stockLabel(st)):'Stock #'+esc(l.StockID)}${l.Grammes!=null?' · '+esc(l.Grammes)+' g':''}</span>`;}
+      if(l.StockID!=null){const st=stockCache.find(x=>Number(x.id)===Number(l.StockID));return `<span class="filament-display">${st?stockSwatch(st):''}${st?esc(stockLabel(st)):'Stock #'+esc(l.StockID)}${l.Grammes!=null?' · '+esc(l.Grammes)+' g':''}</span>`;}
       return l.TexteLibre?`<span class="filament-display">${esc(l.TexteLibre)}</span>`:'';
     }).join('')||'<span class="filament-display">-</span>';
     const src=c.LienFichier?(/^https?:\/\//i.test(c.LienFichier)?`<a class="file-link" href="${esc(c.LienFichier)}" target="_blank" rel="noopener">Ouvrir</a>`:esc(c.LienFichier)):'-';
@@ -296,7 +302,7 @@ function v14Segments(slot){const start=new Date(slot.DateDebut),end=new Date(slo
 async function chargerPlanning(){const end=v14AddDays(planningWeekStart,7);const results=await Promise.all([db.from('PlanningImpression').select('*').lt('DateDebut',end.toISOString()).gt('DateFin',planningWeekStart.toISOString()).order('DateDebut'),db.from('Commande').select('id,Commande,Client,Statut,TempsImpression').order('DateCommande'),db.from('PlanningCouleur').select('*'),db.from('CouleurCommande').select('*')]);const err=results.find(x=>x.error)?.error;if(err){planningGrid.innerHTML=`<div class="empty">Erreur planning : ${esc(err.message)}</div>`;return;}planningSlots=results[0].data||[];planningCommands=results[1].data||[];planningLinks=results[2].data||[];planningColors=results[3].data||[];renderPlanning();}
 function renderPlanning(){$('weekTitle').textContent=v14WeekTitle(planningWeekStart);planningGrid.className='planning-grid v14';const today=v14IsoDate(new Date());let html='<div class="planning-corner"></div>';for(let i=0;i<7;i++){const d=v14AddDays(planningWeekStart,i);html+=`<div class="planning-day ${v14IsoDate(d)===today?'today':''}"><strong>${esc(d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'}))}</strong><small>${v14IsoDate(d)}</small></div>`;}html+='<div class="planning-time-axis">';for(let h=0;h<24;h+=2)html+=`<span class="planning-time-label" style="top:${h/24*100}%">${String(h).padStart(2,'0')}:00</span>`;html+='</div>';for(let i=0;i<7;i++){const d=v14AddDays(planningWeekStart,i);html+=`<div class="planning-day-column ${v14IsoDate(d)===today?'today-column':''}" data-date="${v14IsoDate(d)}">`;for(const slot of planningSlots)for(const seg of v14Segments(slot)){if(seg.idx!==i)continue;const cmd=planningCommands.find(c=>Number(c.id)===Number(slot.CommandeID)),sm=seg.start.getHours()*60+seg.start.getMinutes(),mid=seg.end.getHours()===0&&seg.end.getMinutes()===0&&seg.end>seg.start,em=mid?1440:seg.end.getHours()*60+seg.end.getMinutes(),top=sm/1440*100,height=Math.max(1.7,(em-sm)/1440*100),conflict=planningSlots.some(o=>o.id!==slot.id&&o.Imprimante===slot.Imprimante&&v14Overlap(new Date(slot.DateDebut),new Date(slot.DateFin),new Date(o.DateDebut),new Date(o.DateFin))),cls=`${seg.first?'segment-start':''} ${seg.last?'segment-end':''} ${!seg.first&&!seg.last?'segment-middle':''}`,colors=planningLinks.filter(x=>Number(x.PlanningID)===Number(slot.id)).map(x=>v14ColorLabel(x.CouleurCommandeID));html+=`<div class="planning-event ${slot.Imprimante.toLowerCase()} ${cls} ${conflict?'conflict':''}" data-slot-id="${slot.id}" style="top:${top}%;height:${height}%"><span class="printer-tag">${esc(slot.Imprimante)}</span><strong>${esc(cmd?.Commande||'Commande')}</strong>${slot.Commentaire?`<span>${esc(slot.Commentaire)}</span>`:''}${colors.length?`<span class="event-colors">${esc(colors.join(' · '))}</span>`:''}${height>6?`<span>${esc(cmd?.Client||'')} · ${v14FmtDuration(v14Duration(new Date(slot.DateDebut),new Date(slot.DateFin)))}</span>`:''}</div>`;}html+='</div>';}planningGrid.innerHTML=html;planningGrid.querySelectorAll('.planning-day-column').forEach(cell=>cell.onclick=e=>{if(e.target.closest('.planning-event'))return;const r=cell.getBoundingClientRect(),ratio=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height)),mins=Math.min(1425,Math.round(ratio*1440/15)*15);ouvrirPlanning(null,'P2S',cell.dataset.date,`${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`);});planningGrid.querySelectorAll('.planning-event').forEach(el=>el.onclick=e=>{e.stopPropagation();ouvrirPlanning(planningSlots.find(x=>Number(x.id)===Number(el.dataset.slotId)));});}
 function remplirCommandes(selected){const allowed=planningCommands.filter(c=>statutNormalise(c.Statut)==='À faire'||Number(c.id)===Number(selected));$('planningCommande').innerHTML=allowed.map(c=>`<option value="${c.id}" ${Number(c.id)===Number(selected)?'selected':''}>${esc(c.Commande)} · ${esc(c.Client||'')}</option>`).join('');}
-function renderPlanningColors(commandId,slotId=null){const rows=planningColors.filter(x=>Number(x.CommandeID)===Number(commandId)),selected=new Set(planningLinks.filter(x=>Number(x.PlanningID)===Number(slotId)).map(x=>Number(x.CouleurCommandeID)));$('planningColors').innerHTML=rows.length?rows.map(row=>`<label class="planning-color-option"><input type="checkbox" value="${row.id}" ${selected.has(Number(row.id))?'checked':''}><span>${esc(v14ColorLabel(row.id))}</span></label>`).join(''):'<span class="muted">Cette commande n’a aucune couleur renseignée.</span>';}
+function renderPlanningColors(commandId,slotId=null){const rows=planningColors.filter(x=>Number(x.CommandeID)===Number(commandId)),selected=new Set(planningLinks.filter(x=>Number(x.PlanningID)===Number(slotId)).map(x=>Number(x.CouleurCommandeID)));$('planningColors').innerHTML=rows.length?rows.map(row=>`<label class="planning-color-option"><input type="checkbox" value="${row.id}" ${selected.has(Number(row.id))?'checked':''}><span class="color-cell">${row.StockID!=null?stockSwatch(stockCache.find(s=>Number(s.id)===Number(row.StockID))):''}<span>${esc(v14ColorLabel(row.id))}</span></span></label>`).join(''):'<span class="muted">Cette commande n’a aucune couleur renseignée.</span>';}
 function selectedPlanningColors(){return Array.from(document.querySelectorAll('#planningColors input:checked')).map(x=>Number(x.value));}
 async function savePlanningColors(id){const {error:de}=await db.from('PlanningCouleur').delete().eq('PlanningID',id);if(de)throw de;const ids=selectedPlanningColors();if(ids.length){const {error}=await db.from('PlanningCouleur').insert(ids.map(color=>({PlanningID:Number(id),CouleurCommandeID:color})));if(error)throw error;}}
 function majDureeEtConflit(){const a=v14Local($('planningStartDate').value,$('planningStartTime').value),b=v14Local($('planningEndDate').value,$('planningEndTime').value),ok=b>a;$('planningDuration').textContent=ok?`Durée du créneau : ${v14FmtDuration(v14Duration(a,b))}`:'La fin doit être après le début.';const id=Number($('planningSlotId').value),conf=ok&&planningSlots.find(x=>Number(x.id)!==id&&x.Imprimante===$('planningPrinter').value&&v14Overlap(a,b,new Date(x.DateDebut),new Date(x.DateFin)));$('planningConflict').classList.toggle('hidden',!conf);$('planningConflict').textContent=conf?'⚠ Ce créneau chevauche une autre impression sur cette imprimante. La sauvegarde reste autorisée.':'';}

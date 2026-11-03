@@ -59,3 +59,71 @@ select{width:100%;border:1px solid #cfd4dc;border-radius:9px;padding:11px;font:i
 .planning-grid.v14 .planning-event {
     z-index: 2;
 }
+
+/* V15 - recherche, tri et couleurs visuelles */
+.stock-tools{display:flex;gap:12px;margin-top:18px}.stock-tools input{flex:1;background:#fff}.stock-tools select{width:min(280px,38%)}.color-swatch{display:inline-block;width:18px;height:18px;border-radius:5px;border:1px solid #0002;box-shadow:inset 0 0 0 1px #fff5;vertical-align:middle;flex:0 0 auto}.color-cell{display:flex;align-items:center;gap:9px}.color-picker-row{display:grid;grid-template-columns:52px 1fr;gap:9px}.color-picker-row input[type=color]{height:43px;padding:4px;cursor:pointer}.material-stock-row{display:grid;grid-template-columns:minmax(210px,1.5fr) minmax(180px,1fr) 105px auto;gap:8px;align-items:end}.material-stock-picker{display:grid;gap:6px;min-width:0}.material-stock-picker input,.material-stock-picker select{min-width:0}.material-selected{display:flex;align-items:center;gap:7px;min-height:20px;color:#475467;font-size:12px}.stock-result-count{font-size:11px;color:#667085}.filament-display{display:flex!important;align-items:center;gap:6px}.planning-color-option .color-swatch,.event-colors .color-swatch{width:13px;height:13px}.stock-no-result{padding:22px;text-align:center;color:#667085}
+@media(max-width:760px){.stock-tools{flex-direction:column}.stock-tools select{width:100%}.material-stock-row{grid-template-columns:1fr}.material-stock-row .material-remove{justify-self:start}}
+
+/* V15.1 - formulaire commande plus large + grammes sous le filament */
+#orderModal .dialog {
+    width: min(760px, 100%);
+}
+
+#orderModal .material-stock-row {
+    grid-template-columns: minmax(220px, 1fr) minmax(250px, 1.25fr) auto;
+    align-items: start;
+}
+
+#orderModal .material-stock-row > input[type="number"] {
+    grid-column: 2;
+    width: 150px;
+    margin-top: 4px;
+}
+
+#orderModal .material-stock-row > input[type="number"]::before {
+    content: "Grammes";
+}
+
+#orderModal .material-stock-row .material-remove {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    align-self: center;
+}
+
+@media (max-width: 760px) {
+    #orderModal .dialog {
+        width: min(100%, 620px);
+    }
+
+    #orderModal .material-stock-row {
+        grid-template-columns: 1fr;
+    }
+
+    #orderModal .material-stock-row > input[type="number"],
+    #orderModal .material-stock-row .material-remove {
+        grid-column: 1;
+        grid-row: auto;
+    }
+}
+#orderModal .material-grams-field {
+    grid-column: 2;
+    display: grid;
+    grid-template-columns: auto 110px;
+    align-items: center;
+    justify-content: start;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 12px;
+    color: #667085;
+}
+
+#orderModal .material-grams-field input {
+    width: 110px;
+}
+
+@media (max-width: 760px) {
+    #orderModal .material-grams-field {
+        grid-column: 1;
+        grid-template-columns: 1fr;
+    }
+}

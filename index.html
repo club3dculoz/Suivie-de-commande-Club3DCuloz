@@ -12,6 +12,19 @@
 <main class="wrap">
 <section id="stock" class="page active">
  <div class="title-row"><h2>Stock</h2><button id="addBtn">+ Ajouter</button></div>
+ <div class="stock-tools">
+   <input id="stockSearch" type="search" placeholder="Rechercher un type, une caractéristique ou une couleur...">
+   <select id="stockSort" aria-label="Trier le stock">
+     <option value="type-asc">Type A → Z</option>
+     <option value="type-desc">Type Z → A</option>
+     <option value="carac-asc">Caractéristique A → Z</option>
+     <option value="couleur-asc">Couleur A → Z</option>
+     <option value="grammes-desc">Grammes décroissants</option>
+     <option value="grammes-asc">Grammes croissants</option>
+     <option value="prix-desc">Prix décroissant</option>
+     <option value="prix-asc">Prix croissant</option>
+   </select>
+ </div>
  <div class="stock-table-wrap"><table class="stock-table"><thead><tr><th>Type</th><th>Caractéristique</th><th>Couleur</th><th>Stock restant</th><th>Prix / bobine</th><th>Actions</th></tr></thead><tbody id="stock-list"><tr><td colspan="6" class="empty-cell">Chargement du stock...</td></tr></tbody></table></div>
 </section>
 <section id="commandes" class="page"><div class="title-row"><h2>Commandes</h2><button id="addOrderBtn">+ Nouvelle commande</button></div>
@@ -34,6 +47,7 @@
 <label>Type<input id="type" required placeholder="PLA, PETG..."></label>
 <label>Caracteristique<input id="caracteristique" required placeholder="Basic, Matte..."></label>
 <label>Couleur<input id="couleur" required placeholder="Noir, Rouge..."></label>
+  <label>Couleur visuelle<div class="color-picker-row"><input id="couleurHex" type="color" value="#808080"><input id="couleurHexText" type="text" value="#808080" maxlength="7" pattern="#[0-9A-Fa-f]{6}" placeholder="#RRGGBB"></div></label>
 <label>Grammes restant<input id="grammes" required type="number" step="1"></label>
 <label>Prix par bobine<input id="prix" type="number" min="0" step="0.01" placeholder="12.00"></label>
 <div class="actions"><button type="button" id="cancelBtn" class="secondary">Annuler</button><button type="submit">Enregistrer</button></div>
