@@ -189,6 +189,7 @@ function commandeVisible(c){
 
 function mettreAJourCompteurs(){
   $('countAll').textContent=commandesCache.length;
+    $('countPrepare').textContent=commandesCache.filter(c=>statutNormalise(c.Statut)==='À préparer').length;
   $('countTodo').textContent=commandesCache.filter(c=>statutNormalise(c.Statut)==='À faire').length;
   $('countPrinted').textContent=commandesCache.filter(c=>statutNormalise(c.Statut)==='Imprimé').length;
   $('countDelivered').textContent=commandesCache.filter(c=>statutNormalise(c.Statut)==='Livré').length;
